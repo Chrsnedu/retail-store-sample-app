@@ -46,12 +46,52 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
+      - name: Bootstrap CI EKS admin access
+        run: |
+          set -euo pipefail
+
+          CLUSTER_NAME="project-bedrock-cluster"
+          CI_ROLE_ARN="${{ secrets.AWS_ROLE_ARN }}"
+          ADMIN_POLICY_ARN="arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+          if ! aws eks describe-cluster \
+            --name "$CLUSTER_NAME" \
+            --region "${{ env.AWS_REGION }}" >/dev/null 2>&1; then
+            echo "EKS cluster does not exist yet; skipping access bootstrap."
+            exit 0
+          fi
+
+          if ! aws eks describe-access-entry \
+            --cluster-name "$CLUSTER_NAME" \
+            --principal-arn "$CI_ROLE_ARN" \
+            --region "${{ env.AWS_REGION }}" >/dev/null 2>&1; then
+            aws eks create-access-entry \
+              --cluster-name "$CLUSTER_NAME" \
+              --principal-arn "$CI_ROLE_ARN" \
+              --type STANDARD \
+              --region "${{ env.AWS_REGION }}"
+          fi
+
+          if [ "$(aws eks list-associated-access-policies \
+            --cluster-name "$CLUSTER_NAME" \
+            --principal-arn "$CI_ROLE_ARN" \
+            --region "${{ env.AWS_REGION }}" \
+            --query "contains(accessPolicies[].policyArn, '$ADMIN_POLICY_ARN')" \
+            --output text)" != "True" ]; then
+            aws eks associate-access-policy \
+              --cluster-name "$CLUSTER_NAME" \
+              --principal-arn "$CI_ROLE_ARN" \
+              --policy-arn "$ADMIN_POLICY_ARN" \
+              --access-scope type=cluster \
+              --region "${{ env.AWS_REGION }}"
+          fi
+
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --name project-bedrock-cluster \
             --region ${{ env.AWS_REGION }}
-          echo "KUBE_CONFIG_PATH=$HOME/.kube/config" >> $GITHUB_ENV
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
 
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -67,8 +107,9 @@ jobs:
         env:
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_VAR_db_username: ${{ secrets.TF_VAR_DB_USERNAME }}
-          KUBE_CONFIG_PATH: ${{ env.KUBE_CONFIG_PATH }}
+          KUBECONFIG: ${{ env.KUBECONFIG }}
         run: |
+          set -o pipefail
           terraform plan -no-color -out=tfplan 2>&1 | tee plan_output.txt
           echo "plan_exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
@@ -124,17 +165,93 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
+      - name: Bootstrap CI EKS admin access
+        run: |
+          set -euo pipefail
+
+          CLUSTER_NAME="project-bedrock-cluster"
+          CI_ROLE_ARN="${{ secrets.AWS_ROLE_ARN }}"
+          ADMIN_POLICY_ARN="arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+          if ! aws eks describe-cluster \
+            --name "$CLUSTER_NAME" \
+            --region "${{ env.AWS_REGION }}" >/dev/null 2>&1; then
+            echo "EKS cluster does not exist yet; skipping access bootstrap."
+            exit 0
+          fi
+
+          if ! aws eks describe-access-entry \
+            --cluster-name "$CLUSTER_NAME" \
+            --principal-arn "$CI_ROLE_ARN" \
+            --region "${{ env.AWS_REGION }}" >/dev/null 2>&1; then
+            aws eks create-access-entry \
+              --cluster-name "$CLUSTER_NAME" \
+              --principal-arn "$CI_ROLE_ARN" \
+              --type STANDARD \
+              --region "${{ env.AWS_REGION }}"
+          fi
+
+          if [ "$(aws eks list-associated-access-policies \
+            --cluster-name "$CLUSTER_NAME" \
+            --principal-arn "$CI_ROLE_ARN" \
+            --region "${{ env.AWS_REGION }}" \
+            --query "contains(accessPolicies[].policyArn, '$ADMIN_POLICY_ARN')" \
+            --output text)" != "True" ]; then
+            aws eks associate-access-policy \
+              --cluster-name "$CLUSTER_NAME" \
+              --principal-arn "$CI_ROLE_ARN" \
+              --policy-arn "$ADMIN_POLICY_ARN" \
+              --access-scope type=cluster \
+              --region "${{ env.AWS_REGION }}"
+          fi
+
+      - name: Wait for EKS Cluster Readiness
+        run: |
+          echo "Waiting for EKS cluster to be ACTIVE..."
+          max_attempts=30
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            status=$(aws eks describe-cluster \
+              --name project-bedrock-cluster \
+              --region ${{ env.AWS_REGION }} \
+              --query 'cluster.status' \
+              --output text 2>/dev/null || echo "NOT_FOUND")
+            echo "Cluster status: $status"
+            if [ "$status" = "ACTIVE" ]; then
+              echo "EKS cluster is ACTIVE"
+              break
+            fi
+            attempt=$((attempt+1))
+            if [ $attempt -lt $max_attempts ]; then
+              sleep 10
+            fi
+          done
+          if [ $attempt -eq $max_attempts ]; then
+            echo "ERROR: Cluster did not reach ACTIVE state within timeout"
+            exit 1
+          fi
+
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --name project-bedrock-cluster \
             --region ${{ env.AWS_REGION }}
-          echo "KUBE_CONFIG_PATH=$HOME/.kube/config" >> $GITHUB_ENV
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+
+      - name: Validate kubectl Access
+        run: |
+          echo "Validating kubectl access to cluster..."
+          kubectl cluster-info || true
+          kubectl get nodes || true
+          echo "kubectl configuration complete"
+          
+          echo "Verifying AWS credentials..."
+          aws sts get-caller-identity
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_VAR_db_username: ${{ secrets.TF_VAR_DB_USERNAME }}
-          KUBE_CONFIG_PATH: ${{ env.KUBE_CONFIG_PATH }}
+          KUBECONFIG: ${{ env.KUBECONFIG }}
         run: terraform apply -auto-approve

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1](https://github.com/Chrsnedu/retail-store-sample-app/compare/v1.5.0...v1.5.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* add KUBE_CONFIG_PATH to CI/CD pipeline for kubernetes provider auth ([1995733](https://github.com/Chrsnedu/retail-store-sample-app/commit/19957332ac3732937f09bb2427ad05e533a3cf88))
+* Providers ([126efb8](https://github.com/Chrsnedu/retail-store-sample-app/commit/126efb81c1d69345c43b5589c54ffd0bdaa3f241))
+* Terraform Workflow ([d726b0a](https://github.com/Chrsnedu/retail-store-sample-app/commit/d726b0a25c2ed263018918ab07f6c852ea53a7ba))
+* Update Node Desiar ([77ad08a](https://github.com/Chrsnedu/retail-store-sample-app/commit/77ad08a9f190c18c58f577c78357c42894406780))
+
 ## [1.5.0](https://github.com/aws-containers/retail-store-sample-app/compare/v1.4.2...v1.5.0) (2026-04-29)
 
 

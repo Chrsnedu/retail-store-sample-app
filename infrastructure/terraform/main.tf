@@ -631,3 +631,5 @@ resource "kubernetes_ingress_v1" "retail_app" {
     helm_release.alb_controller
   ]
 }
+
+#======triger pipeline====

@@ -141,6 +141,10 @@ The following options are available to deploy the application using Terraform:
 | [Amazon ECS](./terraform/ecs/default/)           | Deploys the application to Amazon ECS using other AWS services for dependencies, such as RDS, DynamoDB etc.     |
 | [AWS App Runner](./terraform/apprunner/)         | Deploys the application to AWS App Runner using other AWS services for dependencies, such as RDS, DynamoDB etc. |
 
+### Project Bedrock
+
+This repository also includes a project-specific AWS EKS deployment for InnovateMart's Project Bedrock assessment. See the [Project Bedrock deployment guide](./docs/project-bedrock.md) for the Terraform architecture, CI/CD workflow, verification steps, grading output, and cleanup guidance.
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
